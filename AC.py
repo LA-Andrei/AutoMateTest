@@ -16,7 +16,7 @@ from flatten import flatten_base
 ######conversion DICT hard coded
 
 cTable = {
-    "Zon":"_Curves",
+    "Zone":"_Curves",
     "Wall":"_Walls_50",
     "Column":"_Columns_50",
     "Slab":"_Floors_20",
@@ -28,9 +28,6 @@ cTable = {
     "Morph":"_Context_30"
     }
 
-yyy = Base()
-
-print(type(yyy) == type(Base()))
 
 #####Functions here#######
 #Send to stream
@@ -77,20 +74,21 @@ def kCheck(obj,key):
     except:
         return False
     
-def createUstrings(obj,list = ["level.name", "layer", "height", "thickness", "room", "lengh", "area", "name", "number","elemenetType"]):
+def createUstrings(obj,list = ["level", "type", "layer", "height", "thickness", "room", "lengh", "area", "name", "number","elemenetType"]):
 
-    ###Attempt to add specific attributes as user strings
+    ###Attempt to add specific attributes as user strings 
 
     #list = ["level", "layer", "height", "thickness", "room", "lengh", "area", "name", "number","elemenetType"]
     #obj.userStrings = Base( level = obj.level.name, layer = str(obj.layer), applicationId = str(obj.applicationId), height = str(obj.height), thickness = str(obj.thickness), elementType = obj.elementType)
-    obj.userStrings = Base (applicationId = str(obj.applicationId), speckle_type = str(obj.speckle_type))
+    userStrings = Base (applicationID = str(obj.applicationId), speckleType = str(obj.speckle_type))
 
     for i in list:
         if kCheck(obj,i) == True:
             if type(obj[i]) != type(Base()):
-                 obj.userStrings[i] = obj[i]
+                userStrings[i] = obj[i]
             else:
-                obj.userStrings[i] = obj[i]["Name"]
+                userStrings[i] = obj[i].name
+    return userStrings
 
 def translateModellAC(ACmodell):
 
@@ -145,41 +143,36 @@ for i in ac2Layers:
 ###Check for Zones
 acZones = [i for i in elements if i.name == "Zone"]
 print(f"Zones found in project: {len(acZones[0].elements)}")
-
-if len(acZones) > 0:
-
-    dl_Inputs = [Collection(name = "_Curves",elements = [], collectionType = "layer")] + dl_Inputs
-    zoneObjs = [i for i in elements if i.name == "Zone"]
-
-    ###Adding userstrings to outline to get them in rhino
-
-    
-    #for i in zoneObjs[0].elements:
-    #    i.outline.userStrings = Base(applicationID = str(i.applicationId), RoomName = str(i.name), RoomNumber = str(i.number), RoomArea = str(i.area), RoomHeight = str(i.height),elementType = str(i.elementType), speckle_type = str(i.speckle_type))
-
-    crvZones = [i.outline for i in zoneObjs[0].elements]
-    ### adding the Collection object containing the Curves
-    daylightGeo = [Collection(name = "_Curves", elements = crvZones, collectionType = "layer")] + daylightGeo
-    
-    
+  
 print (f"daylight_Inputs found {len(dl_Inputs)} layers!")
 
-#k.get_member_names
+
 ###add objects to Daylight layers from AC type collections
 for i in range(0,len(dl_Inputs)):
-    dl_Inputs[i].elements = daylightGeo[i].elements
-    print (f"{dl_Inputs[i].name} found {len(daylightGeo[i].elements)} elements!")
+    
+    for ele in daylightGeo[i].elements:
+        if daylightGeo[i].name != "Zone":
+            try:
+                for dValue in ele.displayValue:
+                    dValue.userStrings = createUstrings(ele)
+                    dl_Inputs[i].elements.append(dValue)
+            except:
+                print("error on dValue to Daylight Base")
+        else:
+            try:
+                ele.outline.userStrings = createUstrings(ele)
+                dl_Inputs[i].elements.append(ele.outline)
+            except:
+                print("error on outline to Daylight Base")
 
-    for j in dl_Inputs[i].elements:
-        #if j.speckle_type != "Objects.Geometry.Polycurve":
-            if "userStrings" not in j.get_member_names():
-                createUstrings(j)
+    print (f"{dl_Inputs[i].name} found {len(daylightGeo[i].elements)} elements!")
+  
 
 DL_modell.elements[0].elements = dl_Inputs
 
-#print (DL_modell.elements[0].elements)
+print (DL_modell.elements[0].elements)
 
-#send stream
+###send stream
 Send(DL_modell, "https://multiconsult.speckle.xyz/projects/8c1aca44f6")
 
 

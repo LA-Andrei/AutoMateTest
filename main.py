@@ -47,7 +47,7 @@ def automate_function(
     """
     # the context provides a conveniet way, to receive the triggering version
     version_root_object = automate_context.receive_version()
-
+    
     objects_with_forbidden_speckle_type = [
         b
         for b in flatten_base(version_root_object)

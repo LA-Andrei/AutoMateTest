@@ -90,7 +90,7 @@ def createUstrings(obj,list = ["level.name", "layer", "height", "thickness", "ro
             if type(obj[i]) != type(Base()):
                  obj.userStrings[i] = obj[i]
             else:
-                obj.userStrings[i]["Name"]
+                obj.userStrings[i] = obj[i]["Name"]
 
 def translateModellAC(ACmodell):
 

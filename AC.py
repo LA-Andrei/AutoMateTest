@@ -20,7 +20,7 @@ cTable = {
     "Wall":"_Walls_50",
     "Column":"_Columns_50",
     "Slab":"_Floors_20",
-    "Stair":"_Floors_20",
+    "Stair":"_Stairs_20",
     "Ceiling":"_Ceilings_70",
     "Roof":"_Roof_20",
     "Railing":"_Railings_20",
@@ -95,9 +95,9 @@ def createUstrings(obj,list = ["level", "type", "layer", "height", "width", "thi
                 userStrings[i] = obj[i].name
     return userStrings
 
-def getChildren(input):
+def getChildrenGlass(input):
     #get children elements from BaseObject
-
+    #Takes Collection
     subEle = {}
     returnThis = {"ALT1":subEle, "ALT2":[]}
 
@@ -148,10 +148,36 @@ def getChildren(input):
 
     return returnThis
 
+def getChildren(input):
+    #get children elements from Base() / list of Base() / collection of Base()
+    #returns one list
+    subEle = {}
+    returnThis = []
+
+      
+    if type(input) == Collection:
+        objList = input.elements
+        isCol = True
+    elif type(input) != list:
+        objList = [input]
+    else:
+        objList = input
+
+    for obj in objList:
+        if "elements" in obj.get_member_names() and obj.elements is not None:
+            returnThis.extend(obj.elements)
+            """for j in obj.elements:
+                
+                parentStrings = createUstrings(j)
+                if (j.elementType in cTable.keys()) and (cTable[j.elementType] not in [col.name for col in dl_Inputs]) and (j.displayValue is not None) :
+                    for dMesh in j.displayValue:
+                        dMesh.userStrings = parentStrings
+                        ###ALT1: adding each dValue mesh at a time as a new object in collection elements."""
+    return returnThis        
 
 def findGlass(input):
 
-    
+    #Takes Collection, List of Base() or Base()
     #format input to list
     if type(input) == Collection:
         objList = input.elements
@@ -220,13 +246,13 @@ cData = operations.receive(comm.referencedObject, transport)
     print ("AC")
 """
 
-elements = cData.elements
+AC_Collections = cData.elements
 
-for i in elements:
+for i in AC_Collections:
     print (f"{i.name} - {i.speckle_type} !!!" )
 
 
-###Reverse engineer empty Commit structure from rhino stream
+###Reverse engineer empty Commit structure from rhino stream // GLOBALS
 
 DL_modell = Collection(name = "DaylightModel", elements = [], collectionType = "Daylight Model")
 DL_modell.elements.append(Collection(name = "Daylight_Inputs", elements = [], collectionType = "Layer",))
@@ -234,63 +260,57 @@ dl_Inputs = DL_modell.elements[0].elements
 
 ###Translate AC collection names to daylight layernames with the conversion dict
 
-ac2Layers = [cTable[i.name] for i in elements if i.name in cTable.keys()]
+ac2Layers = [cTable[i.name] for i in AC_Collections if i.name in cTable.keys()]
 
 
 ###Filter geometry from the collections that made it through the dict
-daylightGeo = [i for i in elements if i.name in cTable.keys()]
+daylightGeo = [i for i in AC_Collections if i.name in cTable.keys()]
 
 ###create Collections from Daylight layernames
-for i in ac2Layers:
-    dl_Inputs.append(Collection(name = i, elements = [], collectionType = "layer"))
+#for i in ac2Layers:
+#    dl_Inputs.append(Collection(name = i, elements = [], collectionType = "layer"))
 
  
 
 ###Check for Zones
-acZones = [i for i in elements if i.name == "Zone"]
+acZones = [i for i in AC_Collections if i.name == "Zone"]
 print(f"Zones found in project: {len(acZones[0].elements)}")
-  
-print (f"daylight_Inputs found {len(dl_Inputs)} layers!")
+#print (f"daylight_Inputs found {len(dl_Inputs)} layers!")
 
 
 ###add objects to Daylight layers from AC type collections
 
-for i in range(0,len(dl_Inputs)):
-    subEleTypes = set()
-    t2Collections = {}
-
+for i in range(0,len(daylightGeo)):
+        
+    ###add relevant collectionss to dl_imputs if not already present
+    if cTable[daylightGeo[i].name] not in [col.name for col in dl_Inputs]:
+        
+        if cTable[daylightGeo[i].name].count("_") == 2 or daylightGeo[i].name == "Zone":
+            dl_Inputs.append(Collection(name = cTable[daylightGeo[i].name], elements = [], collectionType = "layer" ))
+            print (f"daylight_Inputs added {cTable[daylightGeo[i].name]} layer!") 
+            targetIndex = [col.name for col in dl_Inputs].index(cTable[daylightGeo[i].name])
+    ###iterate over relevant AC collections    
     for ele in daylightGeo[i].elements:
         
+        ### handle regular geometry
         if daylightGeo[i].name not in ["Zone","CurtainWall"]:
-            try:
-                eleNames = ele.get_member_names()
-                
-                if "elements" in eleNames:
-                    
-                    for ii in ele.elements:
-
-                        subEleTypes.append(ele.elements.elementType)
-                        if ele.elements.elementType not in t2Collections.keys():
-                            t2Collections[ele.elements.elementType] = Collection(name = ele.elements.elementType, elements=[ii], collectionType = "layer")
-                        else: 
-                            t2Collections[ele.elements.elementType].elements.append(ii)
-
-            except:
-                failCount = "things Failed"
-                
+ 
             try:
                 for dValue in ele.displayValue:
                     dValue.userStrings = createUstrings(ele)
-                    dl_Inputs[i].elements.append(dValue)
-            except:
-                print("error on dValue to Daylight Base")
 
+                    dl_Inputs[targetIndex].elements.append(dValue)
+            except:
+                pass
+        ### special case: zones
         elif daylightGeo[i].name == "Zone":
+            failcount = 0
             try:
                 ele.outline.userStrings = createUstrings(ele)
-                dl_Inputs[i].elements.append(ele.outline)
+                dl_Inputs[targetIndex].elements.append(ele.outline)
             except:
-                print(f"error on outline to Daylight Base: {ele.elementType}")
+                failcount +=1
+    ### special case: curtain walls
     if daylightGeo[i].name == "CurtainWall":
         #Collections based on mesh.rendermaterial.opacity
         cWalls = daylightGeo[i].elements
@@ -299,21 +319,27 @@ for i in range(0,len(dl_Inputs)):
         sum = dl_Inputs.extend(meshCollection)
         
 
-    print (f"{dl_Inputs[i].name} found {len(daylightGeo[i].elements)} elements!")
+    
 
 test1 = daylightGeo[5].elements
 test2 = daylightGeo[5]
 #TestVars = getChildren(test)  
-#subEle = getChildren(daylightGeo[0].elements)
-testCol = list(findGlass(test1).values())
+#subEle = getChildren(daylightGeo[0].elements[:11])
+#testCol = list(findGlass(test1).values())
 #print (testCol)
 #print (testCol.values())
-t2Collections
 
-children = getChildren(daylightGeo[0].elements)["ALT1"]
+###Get windows doors from walls
+walCols = [i for i in daylightGeo if i.name == "Wall"]
+allWalls = []
+for i in walCols:
+    allWalls.extend(i.elements)
+
+winDoors = getChildren(allWalls)
+winDoorsByGlass = findGlass(winDoors)
 
 #DL_modell.elements[0].elements += children.values()
-DL_modell.elements[0].elements = dl_Inputs + [*children.values()]
+DL_modell.elements[0].elements = dl_Inputs + [*winDoorsByGlass.values()]
 
 print (DL_modell.elements[0].elements)
 

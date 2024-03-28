@@ -11,7 +11,7 @@ jobs:
       FUNCTION_SCHEMA_FILE_NAME: functionSchema.json
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -29,7 +29,7 @@ jobs:
         run: |
           python main.py generate_schema ${HOME}/${{ env.FUNCTION_SCHEMA_FILE_NAME }}
       - name: Speckle Automate Function - Build and Publish
-        uses: specklesystems/speckle-automate-github-composite-action@0.8.0
+        uses: specklesystems/speckle-automate-github-composite-action@0.8.1
         with:
           speckle_automate_url: ${{ env.SPECKLE_AUTOMATE_URL || 'https://automate.speckle.dev' }} 
           speckle_token: ${{ secrets.SPECKLE_FUNCTION_TOKEN }}

@@ -34,17 +34,27 @@ cTable = {
 
 #####Functions here#######
 #Send to stream
-def Send(DL_modell, Stream):
+def SendDL(DL_modell, Stream, source):
     #sWrap = StreamWrapper ("https://multiconsult.speckle.xyz/projects/8c1aca44f6")
     sWrap = StreamWrapper (Stream)
+    #sourceWrap = StreamWrapper(source)
     sTransport = sWrap.get_transport()
     sClient = sWrap.get_client()
+    dStream = sClient.stream.get(sWrap.stream_id)
 
+    if "daylight_models" in [i.name for i in dStream.branches.items]:
+        dl_branch = sClient.branch.get(sWrap.stream_id,"daylight_models", 1)
+        print (dl_branch.name)
+    else:
+        dl_branchID = sClient.branch.create(dStream.id ,"daylight_models",f"AC2Daylight via Python")
+        print(dl_branchID + " created!")    
     sendID = operations.send(DL_modell, [sTransport])
-    sClient.commit.create(sWrap.stream_id, sendID, message= " simple translate test" )
+    sClient.commit.create(sWrap.stream_id, sendID, branch_name="daylight_models",  message= f"daylight model source:{source}" )
+
 def stripString(string):
     noSpaces = string.replace(" ", "")
     return noSpaces
+
 def dupeStream(source, target = "https://multiconsult.speckle.xyz/projects/8c1aca44f6"):
 
 
@@ -69,16 +79,7 @@ def dupeStream(source, target = "https://multiconsult.speckle.xyz/projects/8c1ac
     print ("DUP COMPLETE")
 
     return
-def kCheck(obj,key):
-    ###check for attribute in Base
-    try: 
-        if key in obj.get_member_names():
-            return True
-        else:
-            return False
-    except:
-        return False
-    
+  
 def createUstrings(obj,list = ["level", "type", "layer", "height", "width", "thickness", "room", "lengh", "area", "name", "number","nummer","elemenetType"]):
 
     ###Attempt to add specific attributes as user strings 
@@ -88,7 +89,7 @@ def createUstrings(obj,list = ["level", "type", "layer", "height", "width", "thi
     userStrings = Base (appID = str(obj.applicationId), speckleType = str(obj.speckle_type))
 
     for i in list:
-        if kCheck(obj,i) == True:
+        if hasattr(obj,i) == True:
             if type(obj[i]) != type(Base()):
                 userStrings[i] = str(obj[i])
             else:
@@ -195,11 +196,11 @@ def findGlass(input):
         eleType = stripString(j.elementType)
 
         if (eleType in cTable.keys()) and (j.displayValue is not None) :
-            colList = [col.name for col in dl_Inputs]
+            #colList = [col.name for col in dl_Inputs]
 
-            if (cTable[eleType] in colList):
+            #if (cTable[eleType] in colList):
 
-                index = colList.index(cTable[eleType])
+                #index = colList.index(cTable[eleType])
                 #dl_Inputs.pop(index)
 
             for dMesh in j.displayValue:
@@ -221,130 +222,235 @@ def findGlass(input):
 
     return subEle
 
-def translateModellAC(ACmodell):
+def filterCeilings(inputCollection):
 
-    pass
+    itakList = []
+    slabList = []
+    keywords = ["innertak","undertak"]
+    if type(inputCollection) == Collection:
+        objList = inputCollection.elements
+        isCol = True
+    elif type(inputCollection) != list:
+        objList = [inputCollection]
+    else:
+        objList = inputCollection
 
-    
-#dupeStream("https://multiconsult.speckle.xyz/projects/8a2236a279/models/368a0dea30@49ff6e189b")                      
-                      
-#urlStream = input ("Stream to receive: ")
-
-
-###Receive AC Stream data
-#urlStream = "https://multiconsult.speckle.xyz/projects/8c1aca44f6/models/8819271698@91c950d961"
-urlStream = "https://multiconsult.speckle.xyz/projects/8c1aca44f6/models/8819271698@9621d4f8bb"
-wrapper = StreamWrapper(urlStream)
-client = wrapper.get_client()
-transport = wrapper.get_transport()
-
-comm = client.commit.get(wrapper.stream_id, wrapper.commit_id)
-cData = operations.receive(comm.referencedObject, transport)
-
-
-"""if comm.sourceApplication == "Archicad":
-    print ("AC")
-"""
-
-AC_Collections = cData.elements
-
-for i in AC_Collections:
-    print (f"{i.name} - {i.speckle_type} !!!" )
-
-
-###Reverse engineer empty Commit structure from rhino stream // GLOBALS
-
-DL_modell = Collection(name = "DaylightModel", elements = [], collectionType = "Daylight Model")
-DL_modell.elements.append(Collection(name = "Daylight_Inputs", elements = [], collectionType = "Layer",))
-dl_Inputs = DL_modell.elements[0].elements
-
-###Translate AC collection names to daylight layernames with the conversion dict
-
-ac2Layers = [cTable[i.name] for i in AC_Collections if i.name in cTable.keys()]
-
-
-###Filter geometry from the collections that made it through the dict
-daylightGeo = [i for i in AC_Collections if i.name in cTable.keys()]
-
-###create Collections from Daylight layernames
-#for i in ac2Layers:
-#    dl_Inputs.append(Collection(name = i, elements = [], collectionType = "layer"))
-
- 
-
-###Check for Zones
-acZones = [i for i in AC_Collections if i.name == "Zone"]
-print(f"Zones found in project: {len(acZones[0].elements)}")
-#print (f"daylight_Inputs found {len(dl_Inputs)} layers!")
-
-
-###add objects to Daylight layers from AC type collections
-
-for i in range(0,len(daylightGeo)):
-        
-    ###add relevant collectionss to dl_imputs if not already present
-    if cTable[daylightGeo[i].name] not in [col.name for col in dl_Inputs]:
-        
-        if cTable[daylightGeo[i].name].count("_") == 2 or daylightGeo[i].name == "Zone":
-            dl_Inputs.append(Collection(name = cTable[daylightGeo[i].name], elements = [], collectionType = "layer" ))
-            print (f"daylight_Inputs added {cTable[daylightGeo[i].name]} layer!") 
-            targetIndex = [col.name for col in dl_Inputs].index(cTable[daylightGeo[i].name])
-    ###iterate over relevant AC collections    
-    for ele in daylightGeo[i].elements:
-        
-        ### handle regular geometry
-        if daylightGeo[i].name not in ["Zone","CurtainWall"]:
- 
-            try:
-                for dValue in ele.displayValue:
-                    dValue.userStrings = createUstrings(ele)
-
-                    dl_Inputs[targetIndex].elements.append(dValue)
-            except:
-                pass
-        ### special case: zones
-        elif daylightGeo[i].name == "Zone":
-            failcount = 0
-            try:
-                ele.outline.userStrings = createUstrings(ele)
-                dl_Inputs[targetIndex].elements.append(ele.outline)
-            except:
-                failcount +=1
-    ### special case: curtain walls
-    if daylightGeo[i].name == "CurtainWall":
-        #Collections based on mesh.rendermaterial.opacity
-        cWalls = daylightGeo[i].elements
-        meshCollection = [*findGlass(cWalls).values()]
-        print(meshCollection)
-        sum = dl_Inputs.extend(meshCollection)
-        
-
+    for i in objList:
+        layername = i.layer.lower()
+        if any( x in i.layer.lower() for x in keywords) or i.thickness<0.05:
+            itakList.append(i)
+            
+        else:
+            slabList.append(i)
+    slabCol = Collection(name = "_Floors_20", elements = slabList, collectionType = "layer")
+    if itakList != []:
+        ceilingCol = Collection(name="_Ceilings_70", elements = itakList, collectionType = "layer")
+        return {
+                "Floors":slabCol,
+                "Ceilings":ceilingCol
+                }
+    else:
+        return {"Floors":slabCol}
     
 
-test1 = daylightGeo[5].elements
-test2 = daylightGeo[5]
-#TestVars = getChildren(test)  
-#subEle = getChildren(daylightGeo[0].elements[:11])
-#testCol = list(findGlass(test1).values())
-#print (testCol)
-#print (testCol.values())
+def genDaylightModel(CommitData):
 
-###Get windows doors from walls
-walCols = [i for i in daylightGeo if i.name == "Wall"]
-allWalls = []
-for i in walCols:
-    allWalls.extend(i.elements)
+    AC_Collections = CommitData
 
-winDoors = getChildren(allWalls)
-winDoorsByGlass = findGlass(winDoors)
+    ###Reverse engineer empty Commit structure from rhino stream // GLOBALS
 
-#DL_modell.elements[0].elements += children.values()
-DL_modell.elements[0].elements = dl_Inputs + [*winDoorsByGlass.values()]
+    DL_modell = Collection(name = "DaylightModel", elements = [], collectionType = "Daylight Model")
+    DL_modell.elements.append(Collection(name = "Daylight_Inputs", elements = [], collectionType = "Layer",))
+    dl_Inputs = DL_modell.elements[0].elements
 
-print (DL_modell.elements[0].elements)
+    ###Filter geometry from the collections that made it through the dict
+    daylightGeo = [i for i in AC_Collections if i.name in cTable.keys()]
 
-###send stream
-Send(DL_modell, "https://multiconsult.speckle.xyz/projects/8c1aca44f6")
+    ###add objects to Daylight layers from AC type collections
+
+    for i in range(0,len(daylightGeo)):
+            
+        ###add relevant collectionss to dl_imputs if not already present
+        if cTable[daylightGeo[i].name] not in [col.name for col in dl_Inputs]:
+            
+            if cTable[daylightGeo[i].name].count("_") == 2 or daylightGeo[i].name == "Zone":
+                dl_Inputs.append(Collection(name = cTable[daylightGeo[i].name], elements = [], collectionType = "layer" ))
+                print (f"daylight_Inputs added {cTable[daylightGeo[i].name]} layer!") 
+                targetIndex = [col.name for col in dl_Inputs].index(cTable[daylightGeo[i].name])
+        ###iterate over relevant AC collections    
+        for ele in daylightGeo[i].elements:
+            
+            ### handle regular geometry
+            if daylightGeo[i].name not in ["Zone","CurtainWall"]:
+    
+                try:
+                    for dValue in ele.displayValue:
+                        dValue.userStrings = createUstrings(ele)
+
+                        dl_Inputs[targetIndex].elements.append(dValue)
+                except:
+                    pass
+            ### special case: zones
+            elif daylightGeo[i].name == "Zone":
+                failcount = 0
+                try:
+                    ele.outline.userStrings = createUstrings(ele)
+                    dl_Inputs[targetIndex].elements.append(ele.outline)
+                except:
+                    failcount +=1
+
+            ### special case: ceilings
+            elif daylightGeo[i].name == "Slab":
+                filteredSlabs = filterCeilings(daylightGeo[i].elements)
+
+        ### special case: curtain walls
+        if daylightGeo[i].name == "CurtainWall":
+            #Collections based on mesh.rendermaterial.opacity
+            cWalls = daylightGeo[i].elements
+            meshCollection = [*findGlass(cWalls).values()]
+            print(meshCollection)
+            sum = dl_Inputs.extend(meshCollection)
+            
+
+    ###Get windows doors from walls
+    walCols = [i for i in daylightGeo if i.name == "Wall"]
+    allWalls = []
+    for i in walCols:
+        allWalls.extend(i.elements)
+
+    winDoors = getChildren(allWalls)
+    winDoorsByGlass = findGlass(winDoors)
+
+    #DL_modell.elements[0].elements += children.values()
+    DL_modell.elements[0].elements = dl_Inputs + [*filteredSlabs.values()] + [*winDoorsByGlass.values()]
+
+    return DL_modell
+    
+
+
+##############LOGICTESTING###############
+
+if __name__ == "__main__":
+    
+    #urlStream = input ("Stream to receive: ")
+    ###Receive AC Stream data
+    #urlStream = "https://multiconsult.speckle.xyz/projects/8c1aca44f6/models/8819271698@91c950d961"
+    #urlStream = "https://multiconsult.speckle.xyz/projects/8c1aca44f6/models/8819271698@9621d4f8bb"
+    urlStream =  "https://multiconsult.speckle.xyz/projects/e35c47291d/models/dc14e721c8@2551d279f4"
+    wrapper = StreamWrapper(urlStream)
+    client = wrapper.get_client()
+    transport = wrapper.get_transport()
+
+    comm = client.commit.get(wrapper.stream_id, wrapper.commit_id)
+    cData = operations.receive(comm.referencedObject, transport)
+
+    AC_Collections = cData.elements
+
+    for i in AC_Collections:
+        print (f"{i.name} - {i.speckle_type} !!!" )
+
+
+    ###Reverse engineer empty Commit structure from rhino stream // GLOBALS
+
+    DL_modell = Collection(name = "DaylightModel", elements = [], collectionType = "Daylight Model")
+    DL_modell.elements.append(Collection(name = "Daylight_Inputs", elements = [], collectionType = "Layer",))
+    dl_Inputs = DL_modell.elements[0].elements
+
+    ###Translate AC collection names to daylight layernames with the conversion dict
+
+    ac2Layers = [cTable[i.name] for i in AC_Collections if i.name in cTable.keys()]
+
+
+    ###Filter geometry from the collections that made it through the dict
+    daylightGeo = [i for i in AC_Collections if i.name in cTable.keys()]
+
+    ###create Collections from Daylight layernames
+    #for i in ac2Layers:
+    #    dl_Inputs.append(Collection(name = i, elements = [], collectionType = "layer"))
+
+    
+
+    ###Check for Zones
+    acZones = [i for i in AC_Collections if i.name == "Zone"]
+    print(f"Zones found in project: {len(acZones[0].elements)}")
+    #print (f"daylight_Inputs found {len(dl_Inputs)} layers!")
+
+
+    ###add objects to Daylight layers from AC type collections
+
+    for i in range(0,len(daylightGeo)):
+            
+        ###add relevant collectionss to dl_imputs if not already present
+        if cTable[daylightGeo[i].name] not in [col.name for col in dl_Inputs]:
+            
+            if cTable[daylightGeo[i].name].count("_") == 2 or daylightGeo[i].name == "Zone":
+                dl_Inputs.append(Collection(name = cTable[daylightGeo[i].name], elements = [], collectionType = "layer" ))
+                print (f"daylight_Inputs added {cTable[daylightGeo[i].name]} layer!") 
+                targetIndex = [col.name for col in dl_Inputs].index(cTable[daylightGeo[i].name])
+        ###iterate over relevant AC collections    
+        for ele in daylightGeo[i].elements:
+            
+            ### handle regular elements
+            if daylightGeo[i].name not in ["Zone","CurtainWall","Slab"]:
+    
+                try:
+                    for dValue in ele.displayValue:
+                        dValue.userStrings = createUstrings(ele)
+
+                        dl_Inputs[targetIndex].elements.append(dValue)
+                except:
+                    pass
+            ### special case: zones
+            elif daylightGeo[i].name == "Zone":
+                failcount = 0
+                try:
+                    ele.outline.userStrings = createUstrings(ele)
+                    dl_Inputs[targetIndex].elements.append(ele.outline)
+                except:
+                    failcount +=1
+
+            ### special case: ceilings
+            elif daylightGeo[i].name == "Slab":
+                filteredSlabs = filterCeilings(daylightGeo[i].elements)
+
+
+                
+        ### special case: curtain walls
+        if daylightGeo[i].name == "CurtainWall":
+            #Collections based on mesh.rendermaterial.opacity
+            cWalls = daylightGeo[i].elements
+            meshCollection = [*findGlass(cWalls).values()]
+            print(meshCollection)
+            sum = dl_Inputs.extend(meshCollection)
+            
+
+        
+
+    test1 = daylightGeo[5].elements
+    test2 = daylightGeo[5]
+    #TestVars = getChildren(test)  
+    #subEle = getChildren(daylightGeo[0].elements[:11])
+    #testCol = list(findGlass(test1).values())
+    #print (testCol)
+    #print (testCol.values())
+
+    ###Get windows doors from walls
+    walCols = [i for i in daylightGeo if i.name == "Wall"]
+    allWalls = []
+    for i in walCols:
+        allWalls.extend(i.elements)
+
+    winDoors = getChildren(allWalls)
+    winDoorsByGlass = findGlass(winDoors)
+
+    #DL_modell.elements[0].elements += children.values()
+    DL_modell.elements[0].elements = dl_Inputs + [*filteredSlabs.values()]+[*winDoorsByGlass.values()]
+
+    print (DL_modell.elements[0].elements)
+
+    ###send stream
+    SendDL(DL_modell, "https://multiconsult.speckle.xyz/projects/e35c47291d", urlStream)
+    
 
 
 

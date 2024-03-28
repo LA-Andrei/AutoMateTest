@@ -11,7 +11,7 @@ from speckle_automate import (
 )
 
 from flatten import flatten_base
-
+from AC import *
 
 class FunctionInputs(AutomateBase):
     """These are function author defined values.
@@ -23,18 +23,19 @@ class FunctionInputs(AutomateBase):
 
     # an example how to use secret values
     whisper_message: SecretStr = Field(title="This is a secret message")
-    forbidden_speckle_type: str = Field(
-        title="Forbidden speckle type",
+    branchName: str = Field(
+        title="optional daylight model name:",
         description=(
-            "If a object has the following speckle_type,"
-            " it will be marked with an error."
+            "Branch to upload Daylight modell to"
+            " Defaults to 'Daylight_Models'"
         ),
+        default_factory = "Daylight_models"
     )
-
 
 def automate_function(
     automate_context: AutomationContext,
     function_inputs: FunctionInputs,
+    
 ) -> None:
     """This is an example Speckle Automate function.
 
@@ -48,6 +49,11 @@ def automate_function(
     # the context provides a conveniet way, to receive the triggering version
     version_root_object = automate_context.receive_version()
     
+    dl_modell = genDaylightModel(version_root_object)
+    AutomationContext.create_new_version_in_project(dl_modell,function_inputs.branchName,f"sourced from commit id: {automate_context.automation_run_data.model_id}")
+    
+
+    example_logic = """
     objects_with_forbidden_speckle_type = [
         b
         for b in flatten_base(version_root_object)
@@ -55,7 +61,8 @@ def automate_function(
     ]
     count = len(objects_with_forbidden_speckle_type)
 
-    if count > 0:
+    
+     if count > 0:
         # this is how a run is marked with a failure cause
         automate_context.attach_error_to_objects(
             category="Forbidden speckle_type"
@@ -80,6 +87,8 @@ def automate_function(
     # if the function generates file results, this is how it can be
     # attached to the Speckle project / model
     # automate_context.store_file_result("./report.pdf")
+
+"""
 
 
 def automate_function_without_inputs(automate_context: AutomationContext) -> None:
